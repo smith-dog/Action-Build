@@ -1067,6 +1067,9 @@ jobs:
           # DROID_SPACES配置*
           if [ "${{ github.event.inputs.DROID_SPACES }}" = "true" ]; then
             set_config "CONFIG_NTSYNC=y"
+            set_config "CONFIG_CGROUP_PIDS=y"
+            set_config "CONFIG_CGROUP_DEVICE=y"
+            set_config "CONFIG_BRIDGE_NETFILTER=y"
             set_config "CONFIG_SYSVIPC=y"
             set_config "CONFIG_DEVTMPFS=y"
             set_config "CONFIG_PID_NS=y"
