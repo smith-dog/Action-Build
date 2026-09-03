@@ -112,7 +112,7 @@ on:
         type: string
         description: "ZRAM(0关闭1开启)/算法名/大小//ZRAM (0: disable, 1: enable) / Algorithm name / Size"
         required: true
-        default: "0/lz4kd/8589934592"
+        default: "1/lz4/12884901888"
       SUFFIX:
         type: string
         description: "自定义内核后缀(不输入使用RAND_STR或-1关闭)//Custom kernel suffix (Leave blank to use RAND_STR, or -1 to disable)"
@@ -997,7 +997,10 @@ jobs:
 
           # KernelSU配置
           set_config "CONFIG_KSU=y"
-
+          
+          # buletooth配置
+          set_config "CONFIG_BT_MTKUART=y"
+          
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
             set_config "CONFIG_KPM=y"
