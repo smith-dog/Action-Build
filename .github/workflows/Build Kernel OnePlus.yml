@@ -1428,6 +1428,27 @@ jobs:
             cp "$image_path" kernel_workspace/kernel_platform/out/Final-Image-Find/Image
           fi
 
+      - name: Collect MTK STP HCI glue module
+        run: |
+          mkdir -p btmtk_stp_hci_out
+          KO=$(find kernel_workspace/kernel_platform -name "btmtk_stp_hci.ko" | head -n 1)
+          if [ -n "$KO" ]; then
+            cp "$KO" btmtk_stp_hci_out/
+            echo "✅ collected: $KO"
+            OUTDIR=$(dirname "$KO")
+            [ -f "$OUTDIR/../../Module.symvers" ] && cp "$OUTDIR/../../Module.symvers" btmtk_stp_hci_out/ || true
+            [ -f "$OUTDIR/../../.config" ] && cp "$OUTDIR/../../.config" btmtk_stp_hci_out/ || true
+          else
+            echo "⚠️ btmtk_stp_hci.ko not found in build output"
+          fi
+
+      - name: Upload MTK STP HCI glue module
+        uses: actions/upload-artifact@v7
+        with:
+          name: btmtk_stp_hci_ko
+          path: btmtk_stp_hci_out/*
+          if-no-files-found: warn
+
       - name: Apply KPX and Replace Image
         if: ${{ github.event.inputs.KPM != 'N/A' }}
         run: |
