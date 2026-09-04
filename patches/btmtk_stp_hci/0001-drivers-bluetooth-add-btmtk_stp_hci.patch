@@ -1,3 +1,41 @@
+diff --git a/drivers/bluetooth/Kconfig b/drivers/bluetooth/Kconfig
+index 4e73a531..c9c8cbc2 100644
+--- a/drivers/bluetooth/Kconfig
++++ b/drivers/bluetooth/Kconfig
+@@ -425,4 +425,23 @@ config BT_HCIRSI
+ 	  Say Y here to compile support for HCI over Redpine into the
+ 	  kernel or say M to compile as a module.
+ 
++config BT_MTK_STP_HCI
++	tristate "MediaTek STP (wmt_drv) HCI glue for built-in consys BT"
++	depends on BT && m
++	default m
++	help
++	  Bind the MediaTek combo connsys core (wmt_drv: WMT + STP, the
++	  engine behind the Android /dev/stpbt chardev on MT6895 phones)
++	  to the standard Linux HCI stack, creating hci0 from the built-in
++	  Bluetooth controller.  The STP core is switched into its
++	  in-kernel bluez mode and HCI frames are exchanged directly with
++	  net/bluetooth.
++
++	  Requires the vendor wmt_drv module (it provides the exported
++	  mtk_wcn_stp_* / mtk_wcn_wmt_* symbols); this driver loads after
++	  it (MODULE_SOFTDEP).  Mutually exclusive with Android's use of
++	  /dev/stpbt - stop the Android bluetooth HAL first.
++
++	  Say M here to compile as a module (btmtk_stp_hci.ko).
++
+ endmenu
+diff --git a/drivers/bluetooth/Makefile b/drivers/bluetooth/Makefile
+index 1a58a3ae..1a7586de 100644
+--- a/drivers/bluetooth/Makefile
++++ b/drivers/bluetooth/Makefile
+@@ -46,3 +46,5 @@ hci_uart-$(CONFIG_BT_HCIUART_QCA)	+= hci_qca.o
+ hci_uart-$(CONFIG_BT_HCIUART_AG6XX)	+= hci_ag6xx.o
+ hci_uart-$(CONFIG_BT_HCIUART_MRVL)	+= hci_mrvl.o
+ hci_uart-objs				:= $(hci_uart-y)
++
++obj-$(CONFIG_BT_MTK_STP_HCI)	+= btmtk_stp_hci.o
 diff --git a/drivers/bluetooth/btmtk_stp_hci.c b/drivers/bluetooth/btmtk_stp_hci.c
 new file mode 100644
 index 00000000..a2368730
