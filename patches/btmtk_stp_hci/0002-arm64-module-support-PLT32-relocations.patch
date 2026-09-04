@@ -1,0 +1,47 @@
+diff --git a/arch/arm64/include/asm/elf.h b/arch/arm64/include/asm/elf.h
+index 8d1c8dcb..35a57748 100644
+--- a/arch/arm64/include/asm/elf.h
++++ b/arch/arm64/include/asm/elf.h
+@@ -58,6 +58,8 @@
+ #define R_AARCH64_LDST64_ABS_LO12_NC	286
+ #define R_AARCH64_LDST128_ABS_LO12_NC	299
+ 
++#define R_AARCH64_PLT32		312
++
+ #define R_AARCH64_MOVW_PREL_G0		287
+ #define R_AARCH64_MOVW_PREL_G0_NC	288
+ #define R_AARCH64_MOVW_PREL_G1		289
+diff --git a/arch/arm64/kernel/module-plts.c b/arch/arm64/kernel/module-plts.c
+index 5f8bf770..ac3c450d 100644
+--- a/arch/arm64/kernel/module-plts.c
++++ b/arch/arm64/kernel/module-plts.c
+@@ -172,6 +172,7 @@ static unsigned int count_plts(Elf64_Sym *syms, Elf64_Rela *rela, int num,
+ 		switch (ELF64_R_TYPE(rela[i].r_info)) {
+ 		case R_AARCH64_JUMP26:
+ 		case R_AARCH64_CALL26:
++		case R_AARCH64_PLT32:
+ 			if (!IS_ENABLED(CONFIG_RANDOMIZE_BASE))
+ 				break;
+ 
+@@ -265,7 +266,8 @@ static bool branch_rela_needs_plt(Elf64_Sym *syms, Elf64_Rela *rela,
+ 		return false;
+ 
+ 	return ELF64_R_TYPE(rela->r_info) == R_AARCH64_JUMP26 ||
+-	       ELF64_R_TYPE(rela->r_info) == R_AARCH64_CALL26;
++	       ELF64_R_TYPE(rela->r_info) == R_AARCH64_CALL26 ||
++	       ELF64_R_TYPE(rela->r_info) == R_AARCH64_PLT32;
+ }
+ 
+ /* Group branch PLT relas at the front end of the array. */
+diff --git a/arch/arm64/kernel/module.c b/arch/arm64/kernel/module.c
+index b5ec010c..d8a71d1d 100644
+--- a/arch/arm64/kernel/module.c
++++ b/arch/arm64/kernel/module.c
+@@ -443,6 +443,7 @@ int apply_relocate_add(Elf64_Shdr *sechdrs,
+ 			break;
+ 		case R_AARCH64_JUMP26:
+ 		case R_AARCH64_CALL26:
++		case R_AARCH64_PLT32:
+ 			ovf = reloc_insn_imm(RELOC_OP_PREL, loc, val, 2, 26,
+ 					     AARCH64_INSN_IMM_26);
+ 
