@@ -1438,10 +1438,19 @@ jobs:
       - name: Collect MTK STP HCI glue module
         run: |
           mkdir -p btmtk_stp_hci_out
-          # kernel_platform/common is a repo-manifest linkfile (symlink to kernel-5.10),
-          # so plain find does not descend into it - use find -L and both spellings
-          KO=$(find -L kernel_workspace/kernel_platform -name "btmtk_stp_hci.ko" 2>/dev/null | head -n 1)
-          [ -z "$KO" ] && KO=$(find -L kernel_workspace/kernel-5.10 -name "btmtk_stp_hci.ko" 2>/dev/null | head -n 1)
+          echo "=== layout ==="
+          ls -lad kernel_workspace/kernel_platform/common kernel_workspace/kernel-5.10 2>/dev/null
+          ls -lad kernel_workspace/kernel_platform/common/out kernel_workspace/kernel-5.10/out 2>/dev/null
+          echo "=== final .config check ==="
+          for cfg in kernel_workspace/kernel_platform/common/out/.config kernel_workspace/kernel-5.10/out/.config kernel_workspace/kernel_platform/out/.config; do
+            if [ -f "$cfg" ]; then
+              echo "--- $cfg"
+              grep -E "^CONFIG_BT=|^CONFIG_MODULES=|^CONFIG_MODVERSIONS=|^CONFIG_BT_MTK_STP_HCI=|^# CONFIG_BT_MTK_STP_HCI" "$cfg" || echo "  (BT_MTK_STP_HCI absent from config!)"
+            fi
+          done
+          echo "=== module file search (whole workspace) ==="
+          find -L kernel_workspace -maxdepth 12 -name "btmtk_stp_hci.ko" 2>/dev/null | head -5
+          KO=$(find -L kernel_workspace -maxdepth 12 -name "btmtk_stp_hci.ko" 2>/dev/null | head -n 1)
           if [ -n "$KO" ]; then
             cp "$KO" btmtk_stp_hci_out/
             echo "✅ collected: $KO"
@@ -1449,7 +1458,7 @@ jobs:
             [ -f "$OUTDIR/../../Module.symvers" ] && cp "$OUTDIR/../../Module.symvers" btmtk_stp_hci_out/ || true
             [ -f "$OUTDIR/../../.config" ] && cp "$OUTDIR/../../.config" btmtk_stp_hci_out/ || true
           else
-            echo "⚠️ btmtk_stp_hci.ko not found in build output"
+            echo "⚠️ btmtk_stp_hci.ko not found anywhere in kernel_workspace"
           fi
 
       - name: Upload MTK STP HCI glue module
