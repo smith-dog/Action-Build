@@ -950,6 +950,14 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' ./security/Kconfig
 
+      - name: Apply MTK STP HCI glue (hci0 without USB)
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          git apply --check "$GITHUB_WORKSPACE/patches/btmtk_stp_hci/0001-drivers-bluetooth-add-btmtk_stp_hci.patch" \
+            || { echo "btmtk_stp_hci patch check failed"; exit 1; }
+          git apply --whitespace=nowarn "$GITHUB_WORKSPACE/patches/btmtk_stp_hci/0001-drivers-bluetooth-add-btmtk_stp_hci.patch"
+          echo "btmtk_stp_hci patched in"
+
       # 配置信息，带*为附加项目，具有一定危险性和不确定性
       - name: Add Configuration Settings
         run: |
