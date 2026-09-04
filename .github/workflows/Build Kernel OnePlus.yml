@@ -1437,7 +1437,10 @@ jobs:
       - name: Collect MTK STP HCI glue module
         run: |
           mkdir -p btmtk_stp_hci_out
-          KO=$(find kernel_workspace/kernel_platform -name "btmtk_stp_hci.ko" | head -n 1)
+          # kernel_platform/common is a repo-manifest linkfile (symlink to kernel-5.10),
+          # so plain find does not descend into it - use find -L and both spellings
+          KO=$(find -L kernel_workspace/kernel_platform -name "btmtk_stp_hci.ko" 2>/dev/null | head -n 1)
+          [ -z "$KO" ] && KO=$(find -L kernel_workspace/kernel-5.10 -name "btmtk_stp_hci.ko" 2>/dev/null | head -n 1)
           if [ -n "$KO" ]; then
             cp "$KO" btmtk_stp_hci_out/
             echo "✅ collected: $KO"
