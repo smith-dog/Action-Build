@@ -954,7 +954,7 @@ jobs:
         run: |
           PATCH_DIR="$GITHUB_WORKSPACE/patches/btmtk_stp_hci"
           BASE="https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/patches/btmtk_stp_hci"
-          PATCHES="0001-drivers-bluetooth-add-btmtk_stp_hci.patch 0002-arm64-module-support-PLT32-relocations.patch"
+          PATCHES="0001-drivers-bluetooth-add-btmtk_stp_hci.patch"
           mkdir -p "$PATCH_DIR"
           for p in $PATCHES; do
             if [ ! -f "$PATCH_DIR/$p" ]; then

@@ -38,10 +38,10 @@ index 1a58a3ae..1a7586de 100644
 +obj-$(CONFIG_BT_MTK_STP_HCI)	+= btmtk_stp_hci.o
 diff --git a/drivers/bluetooth/btmtk_stp_hci.c b/drivers/bluetooth/btmtk_stp_hci.c
 new file mode 100644
-index 00000000..a2368730
+index 00000000..38df315f
 --- /dev/null
 +++ b/drivers/bluetooth/btmtk_stp_hci.c
-@@ -0,0 +1,468 @@
+@@ -0,0 +1,457 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * btmtk_stp_hci.c - Thin HCI glue for MediaTek STP-based Bluetooth (MT6895 consys)
@@ -134,7 +134,7 @@ index 00000000..a2368730
 +MODULE_AUTHOR("Alpine on MT6895");
 +MODULE_DESCRIPTION("MediaTek STP (wmt_drv) to Linux HCI glue, hci0 without USB");
 +MODULE_VERSION(VERSION);
-+MODULE_SOFTDEP("pre: wmt_drv");
++MODULE_SOFTDEP("pre: connadp");
 +
 +static bool debug;
 +module_param(debug, bool, 0644);
@@ -317,16 +317,14 @@ index 00000000..a2368730
 +
 +static int mtk_stp_hci_open(struct hci_dev *hdev)
 +{
-+	/* All of the wmt_drv API binds (or stays NULL) together at insmod. */
-+	if (!mtk_wcn_stp_is_ready || !mtk_wcn_stp_send_data ||
-+	    !mtk_wcn_stp_receive_data || !mtk_wcn_stp_is_rxqueue_empty ||
-+	    !mtk_wcn_stp_set_bluez || !mtk_wcn_stp_register_if_rx ||
-+	    !mtk_wcn_wmt_func_on || !mtk_wcn_wmt_func_off ||
-+	    !mtk_wcn_wmt_msgcb_reg || !mtk_wcn_wmt_msgcb_unreg) {
-+		bt_dev_err(hdev, "wmt_drv API unavailable (vendor module not loaded)");
-+		return -ENODEV;
-+	}
-+
++	/*
++	 * No null-guards here: taking the address of a __weak extern emits
++	 * GOT relocations (R_AARCH64_ADR_GOT_PAGE/GOT_LD_PREL19) that this
++	 * kernel's module loader cannot process.  The weak symbols bind at
++	 * insmod time instead - only load this module after the MTK
++	 * connectivity stack (connadp/bt_drv_6895) is up; the KSU boot
++	 * script and MODULE_SOFTDEP enforce that ordering.
++	 */
 +	if (!mtk_wcn_stp_is_ready()) {
 +		bt_dev_err(hdev, "STP core not ready");
 +		return -EIO;
@@ -364,10 +362,6 @@ index 00000000..a2368730
 +
 +static int mtk_stp_hci_close(struct hci_dev *hdev)
 +{
-+	if (!mtk_wcn_stp_set_bluez || !mtk_wcn_wmt_msgcb_unreg ||
-+	    !mtk_wcn_wmt_func_off)
-+		return 0;
-+
 +	mutex_lock(&mtk.lock);
 +	mtk_wcn_wmt_msgcb_unreg(MTK_WMTDRV_TYPE_BT);
 +	/* Restore chrdev mode before removing our RX sink. */
@@ -404,11 +398,6 @@ index 00000000..a2368730
 +	if (!h4_type_valid(type)) {
 +		bt_dev_err(hdev, "send, invalid type 0x%02x", type);
 +		return -EINVAL;
-+	}
-+
-+	if (!mtk_wcn_stp_send_data) {
-+		bt_dev_err(hdev, "send, wmt_drv gone");
-+		return -ENODEV;
 +	}
 +
 +	mutex_lock(&mtk.lock);
