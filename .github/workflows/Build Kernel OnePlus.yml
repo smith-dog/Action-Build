@@ -1000,6 +1000,7 @@ jobs:
           
           # buletooth配置
           set_config "CONFIG_BT_MTKUART=y"
+          set_config "CONFIG_BT_MTK_STP_HCI=m"
           
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
