@@ -1017,9 +1017,10 @@ jobs:
           # buletooth配置
           set_config "CONFIG_BT_MTKUART=y"
           set_config "CONFIG_BT_MTK_STP_HCI=m"
-          # btmtk_stp_hci 引用的 mtk_wcn_* 符号由 vendor 预编译模块 wmt_drv.ko 导出，
-          # 不在本次内核构建内；关闭 MODVERSIONS 以免 .ko 内记录错误 CRC 导致加载失败
-          set_config "CONFIG_MODVERSIONS=n"
+          # 注意：MODVERSIONS 必须保持 =y——工厂 vendor 模块（wmt_drv 等）的
+          # vermagic 带 "modversions" 标记，内核若为 n 会令所有 vendor 模块
+          # 被拒载（-ENOEXEC）导致无法开机。btmtk_stp_hci 用 __weak 声明引用
+          # wmt_drv 符号，modpost 与加载期 CRC 均不受影响。
 
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then

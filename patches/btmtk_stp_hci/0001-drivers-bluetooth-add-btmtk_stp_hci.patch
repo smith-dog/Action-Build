@@ -1,47 +1,9 @@
-diff --git a/drivers/bluetooth/Kconfig b/drivers/bluetooth/Kconfig
-index 4e73a531..c9c8cbc2 100644
---- a/drivers/bluetooth/Kconfig
-+++ b/drivers/bluetooth/Kconfig
-@@ -425,4 +425,23 @@ config BT_HCIRSI
- 	  Say Y here to compile support for HCI over Redpine into the
- 	  kernel or say M to compile as a module.
- 
-+config BT_MTK_STP_HCI
-+	tristate "MediaTek STP (wmt_drv) HCI glue for built-in consys BT"
-+	depends on BT && m
-+	default m
-+	help
-+	  Bind the MediaTek combo connsys core (wmt_drv: WMT + STP, the
-+	  engine behind the Android /dev/stpbt chardev on MT6895 phones)
-+	  to the standard Linux HCI stack, creating hci0 from the built-in
-+	  Bluetooth controller.  The STP core is switched into its
-+	  in-kernel bluez mode and HCI frames are exchanged directly with
-+	  net/bluetooth.
-+
-+	  Requires the vendor wmt_drv module (it provides the exported
-+	  mtk_wcn_stp_* / mtk_wcn_wmt_* symbols); this driver loads after
-+	  it (MODULE_SOFTDEP).  Mutually exclusive with Android's use of
-+	  /dev/stpbt - stop the Android bluetooth HAL first.
-+
-+	  Say M here to compile as a module (btmtk_stp_hci.ko).
-+
- endmenu
-diff --git a/drivers/bluetooth/Makefile b/drivers/bluetooth/Makefile
-index 1a58a3ae..1a7586de 100644
---- a/drivers/bluetooth/Makefile
-+++ b/drivers/bluetooth/Makefile
-@@ -46,3 +46,5 @@ hci_uart-$(CONFIG_BT_HCIUART_QCA)	+= hci_qca.o
- hci_uart-$(CONFIG_BT_HCIUART_AG6XX)	+= hci_ag6xx.o
- hci_uart-$(CONFIG_BT_HCIUART_MRVL)	+= hci_mrvl.o
- hci_uart-objs				:= $(hci_uart-y)
-+
-+obj-$(CONFIG_BT_MTK_STP_HCI)	+= btmtk_stp_hci.o
 diff --git a/drivers/bluetooth/btmtk_stp_hci.c b/drivers/bluetooth/btmtk_stp_hci.c
 new file mode 100644
-index 00000000..ccaf1571
+index 00000000..a2368730
 --- /dev/null
 +++ b/drivers/bluetooth/btmtk_stp_hci.c
-@@ -0,0 +1,446 @@
+@@ -0,0 +1,468 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
 + * btmtk_stp_hci.c - Thin HCI glue for MediaTek STP-based Bluetooth (MT6895 consys)
@@ -96,14 +58,17 @@ index 00000000..ccaf1571
 +#define VERSION "0.1"
 +
 +/*
-+ * wmt_drv.ko exported API.
++ * wmt_drv.ko is a prebuilt vendor module and is NOT part of this kernel
++ * build, so its symbols must not be referenced at link/modpost time.
++ * Declare the API as weak: modpost sees definitions (no "undefined" errors
++ * and no MODVERSIONS crc entries), and at insmod time the module loader
++ * binds them from the already-loaded wmt_drv.ko; if it is absent they
++ * resolve to NULL.  Every call site null-checks first.
 + *
 + * Signatures are ABI-identical to the vendor headers
 + * (common_main/include/{stp_exp.h,wmt_exp.h} + osal_typedef.h:
 + *  INT32 = int, UINT32 = unsigned int, MTK_WCN_BOOL = int,
 + *  ENUM_WMTDRV_TYPE_T / ENUM_WMTMSG_TYPE_T = int).
-+ * Declared locally so this file builds both in-tree and out-of-tree
-+ * without pulling MTK headers into the kernel build.
 + */
 +#define MTK_BT_TASK_INDX	0	/* BT_TASK_INDX     (stp_exp.h)	*/
 +#define MTK_WMTDRV_TYPE_BT	0	/* WMTDRV_TYPE_BT   (wmt_exp.h)	*/
@@ -114,18 +79,18 @@ index 00000000..ccaf1571
 +#define WMTRSTMSG_RESET_END	1
 +#define WMTRSTMSG_RESET_END_FAIL 2
 +
-+extern int  mtk_wcn_stp_send_data(const u8 *buffer, u32 length, u8 type);
-+extern int  mtk_wcn_stp_receive_data(u8 *buffer, u32 length, u8 type);
-+extern int  mtk_wcn_stp_is_rxqueue_empty(u8 type);
-+extern int  mtk_wcn_stp_is_ready(void);
-+extern void mtk_wcn_stp_set_bluez(int flag);
-+extern int  mtk_wcn_stp_register_if_rx(void (*func)(const u8 *data, int size));
-+extern int  mtk_wcn_wmt_func_on(int type);
-+extern int  mtk_wcn_wmt_func_off(int type);
++extern int  mtk_wcn_stp_send_data(const u8 *buffer, u32 length, u8 type) __weak;
++extern int  mtk_wcn_stp_receive_data(u8 *buffer, u32 length, u8 type) __weak;
++extern int  mtk_wcn_stp_is_rxqueue_empty(u8 type) __weak;
++extern int  mtk_wcn_stp_is_ready(void) __weak;
++extern void mtk_wcn_stp_set_bluez(int flag) __weak;
++extern int  mtk_wcn_stp_register_if_rx(void (*func)(const u8 *data, int size)) __weak;
++extern int  mtk_wcn_wmt_func_on(int type) __weak;
++extern int  mtk_wcn_wmt_func_off(int type) __weak;
 +extern int  mtk_wcn_wmt_msgcb_reg(int type,
 +			void (*cb)(int src, int dst, int msg_type,
-+				   void *buf, u32 sz));
-+extern int  mtk_wcn_wmt_msgcb_unreg(int type);
++				   void *buf, u32 sz)) __weak;
++extern int  mtk_wcn_wmt_msgcb_unreg(int type) __weak;
 +
 +MODULE_LICENSE("GPL");
 +MODULE_AUTHOR("Alpine on MT6895");
@@ -314,6 +279,16 @@ index 00000000..ccaf1571
 +
 +static int mtk_stp_hci_open(struct hci_dev *hdev)
 +{
++	/* All of the wmt_drv API binds (or stays NULL) together at insmod. */
++	if (!mtk_wcn_stp_is_ready || !mtk_wcn_stp_send_data ||
++	    !mtk_wcn_stp_receive_data || !mtk_wcn_stp_is_rxqueue_empty ||
++	    !mtk_wcn_stp_set_bluez || !mtk_wcn_stp_register_if_rx ||
++	    !mtk_wcn_wmt_func_on || !mtk_wcn_wmt_func_off ||
++	    !mtk_wcn_wmt_msgcb_reg || !mtk_wcn_wmt_msgcb_unreg) {
++		bt_dev_err(hdev, "wmt_drv API unavailable (vendor module not loaded)");
++		return -ENODEV;
++	}
++
 +	if (!mtk_wcn_stp_is_ready()) {
 +		bt_dev_err(hdev, "STP core not ready");
 +		return -EIO;
@@ -351,6 +326,10 @@ index 00000000..ccaf1571
 +
 +static int mtk_stp_hci_close(struct hci_dev *hdev)
 +{
++	if (!mtk_wcn_stp_set_bluez || !mtk_wcn_wmt_msgcb_unreg ||
++	    !mtk_wcn_wmt_func_off)
++		return 0;
++
 +	mutex_lock(&mtk.lock);
 +	mtk_wcn_wmt_msgcb_unreg(MTK_WMTDRV_TYPE_BT);
 +	/* Restore chrdev mode before removing our RX sink. */
@@ -387,6 +366,11 @@ index 00000000..ccaf1571
 +	if (!h4_type_valid(type)) {
 +		bt_dev_err(hdev, "send, invalid type 0x%02x", type);
 +		return -EINVAL;
++	}
++
++	if (!mtk_wcn_stp_send_data) {
++		bt_dev_err(hdev, "send, wmt_drv gone");
++		return -ENODEV;
 +	}
 +
 +	mutex_lock(&mtk.lock);
