@@ -952,10 +952,18 @@ jobs:
 
       - name: Apply MTK STP HCI glue (hci0 without USB)
         run: |
+          PATCH_URL="https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/patches/btmtk_stp_hci/0001-drivers-bluetooth-add-btmtk_stp_hci.patch"
+          PATCH_FILE="$GITHUB_WORKSPACE/patches/btmtk_stp_hci/0001-drivers-bluetooth-add-btmtk_stp_hci.patch"
+          if [ ! -f "$PATCH_FILE" ]; then
+            echo "patch not found in checkout, downloading from smith-dog/Action-Build@KernelSU ..."
+            mkdir -p "$(dirname "$PATCH_FILE")"
+            curl -fsSL "$PATCH_URL" -o "$PATCH_FILE" \
+              || { echo "download patch failed"; exit 1; }
+          fi
           cd kernel_workspace/kernel_platform/common
-          git apply --check "$GITHUB_WORKSPACE/patches/btmtk_stp_hci/0001-drivers-bluetooth-add-btmtk_stp_hci.patch" \
+          git apply --check "$PATCH_FILE" \
             || { echo "btmtk_stp_hci patch check failed"; exit 1; }
-          git apply --whitespace=nowarn "$GITHUB_WORKSPACE/patches/btmtk_stp_hci/0001-drivers-bluetooth-add-btmtk_stp_hci.patch"
+          git apply --whitespace=nowarn "$PATCH_FILE"
           echo "btmtk_stp_hci patched in"
 
       # 配置信息，带*为附加项目，具有一定危险性和不确定性
