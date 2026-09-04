@@ -1017,7 +1017,10 @@ jobs:
           # buletooth配置
           set_config "CONFIG_BT_MTKUART=y"
           set_config "CONFIG_BT_MTK_STP_HCI=m"
-          
+          # btmtk_stp_hci 引用的 mtk_wcn_* 符号由 vendor 预编译模块 wmt_drv.ko 导出，
+          # 不在本次内核构建内；关闭 MODVERSIONS 以免 .ko 内记录错误 CRC 导致加载失败
+          set_config "CONFIG_MODVERSIONS=n"
+
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
             set_config "CONFIG_KPM=y"
@@ -1385,12 +1388,15 @@ jobs:
           fi
 
           make O=out "${MAKE_ARGS[@]}" olddefconfig --no-print-directory
-          make -j"$(nproc --all)" O=out "${MAKE_ARGS[@]}"
+          # btmtk_stp_hci 引用 vendor 模块 wmt_drv.ko 的符号（不在本构建内），
+          # modpost 阶段将 undefined 降级为警告，符号在 insmod 时由已加载的 wmt_drv 解析
+          make -j"$(nproc --all)" O=out KBUILD_MODPOST_WARN=1 "${MAKE_ARGS[@]}"
           ccache -s
 
       - name: Fallback to Build Kernel
         if: ${{ github.event.inputs.FAST_BUILD == 'false' || steps.fast_build.outputs.fallback == 'true' }}
         run: |
+          export KBUILD_MODPOST_WARN=1
           cd kernel_workspace
           if [ -f ./kernel_platform/build_with_bazel.py ]; then
             ./kernel_platform/oplus/bazel/oplus_modules_variant.sh ${{ env.CPUD }} ${{ env.BUILD_METHOD }}
