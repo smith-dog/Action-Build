@@ -167,6 +167,17 @@ static int process_acc(void)
 		if (acc_len < len)
 			return 0;
 
+		/* Mask the controller's bogus Synchronization Train feature
+		 * (page 2 byte 0 bit 2): it claims support but returns
+		 * "Unknown HCI Command" for Read Sync Train Params, which
+		 * aborts the kernel's init sequence. */
+		if (len >= 16 && acc[1] == 0x0e && acc[4] == 0x04 &&
+		    acc[5] == 0x04 && acc[6] == 0x00 && acc[7] == 0x02 &&
+		    (acc[8] & 0x04)) {
+			logmsg("masking bogus Synchronization Train feature");
+			acc[8] &= (unsigned char)~0x04;
+		}
+
 		if (len >= sizeof(HW_ERROR) &&
 		    !memcmp(acc, HW_ERROR, sizeof(HW_ERROR))) {
 			logmsg("HW Error event from controller - reset cycle");

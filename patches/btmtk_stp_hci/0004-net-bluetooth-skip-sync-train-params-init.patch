@@ -1,0 +1,20 @@
+diff --git a/net/bluetooth/hci_core.c b/net/bluetooth/hci_core.c
+index e40eae27..2575967a 100644
+--- a/net/bluetooth/hci_core.c
++++ b/net/bluetooth/hci_core.c
+@@ -843,10 +843,11 @@ static int hci_init4_req(struct hci_request *req, unsigned long opt)
+ 	if (hdev->commands[30] & 0x08)
+ 		hci_req_add(req, HCI_OP_GET_MWS_TRANSPORT_CONFIG, 0, NULL);
+ 
+-	/* Check for Synchronization Train support */
+-	if (lmp_sync_train_capable(hdev))
+-		hci_req_add(req, HCI_OP_READ_SYNC_TRAIN_PARAMS, 0, NULL);
+-
++	/* NOTE: Read Synchronization Train Parameters is intentionally not
++	 * sent: the MTK consys controller advertises the Synchronization
++	 * Train feature but returns "Unknown HCI Command" for it, which
++	 * aborts the whole init sequence.
++	 */
+ 	/* Enable Secure Connections if supported and configured */
+ 	if (hci_dev_test_flag(hdev, HCI_SSP_ENABLED) &&
+ 	    bredr_sc_enabled(hdev)) {
