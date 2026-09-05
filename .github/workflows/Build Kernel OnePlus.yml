@@ -953,7 +953,7 @@ jobs:
       - name: Apply BT netns patch (AF_BLUETOOTH from containers)
         run: |
           PATCH_DIR="$GITHUB_WORKSPACE/patches/btmtk_stp_hci"
-          BASE="https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/patches/btmtk_stp_hci"
+          BASE="https://raw.githubusercontent.com/smith-dog/Action-Build/$GITHUB_SHA/patches/btmtk_stp_hci"
           PATCHES="0003-net-bluetooth-allow-BT-sockets-from-non-init-netns.patch 0004-net-bluetooth-skip-sync-train-params-init.patch"
           mkdir -p "$PATCH_DIR"
           for p in $PATCHES; do
@@ -1526,7 +1526,7 @@ jobs:
       - name: Build stpbt vhci bridge (static aarch64)
         run: |
           SRC="$GITHUB_WORKSPACE/bridge/bridge.c"
-          URL="https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/bridge/bridge.c"
+          URL="https://raw.githubusercontent.com/smith-dog/Action-Build/$GITHUB_SHA/bridge/bridge.c"
           echo "workspace root listing (diagnostic):"
           ls -la "$GITHUB_WORKSPACE/bridge" 2>/dev/null || echo "  (bridge/ absent from checkout)"
           if [ ! -f "$SRC" ]; then

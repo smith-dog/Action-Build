@@ -172,7 +172,7 @@ static int process_acc(void)
 		 * "Unknown HCI Command" for Read Sync Train Params, which
 		 * aborts the kernel's init sequence. */
 		if (len >= 16 && acc[1] == 0x0e && acc[4] == 0x04 &&
-		    acc[5] == 0x04 && acc[6] == 0x00 && acc[7] == 0x02 &&
+		    acc[5] == 0x10 && acc[6] == 0x00 && acc[7] == 0x02 &&
 		    (acc[8] & 0x04)) {
 			logmsg("masking bogus Synchronization Train feature");
 			acc[8] &= (unsigned char)~0x04;
@@ -240,7 +240,7 @@ int main(int argc, char **argv)
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 
-	logmsg("bridge v2 starting: %s <-> %s", stp_path, vh_path);
+	logmsg("bridge v3 starting: %s <-> %s", stp_path, vh_path);
 
 	vh_fd = open(vh_path, O_RDWR);
 	if (vh_fd < 0) {
