@@ -1502,6 +1502,21 @@ jobs:
           name: AnyKernel3_KernelSU_${{ env.KSUVER }}_${{ steps.extract_info.outputs.value }}(${{ env.CKERNEL_VERSION }})${{ steps.suffix.outputs.value }}
           path: ./AnyKernel3/*
 
+      - name: Build stpbt vhci bridge (static aarch64)
+        run: |
+          sudo apt-get install -y -q gcc-aarch64-linux-gnu
+          mkdir -p bridge_out
+          cp "$GITHUB_WORKSPACE/bridge/bridge.c" ./bridge.c
+          aarch64-linux-gnu-gcc -static -O2 -s -o bridge_out/stpbt_bridge bridge.c
+          file bridge_out/stpbt_bridge
+
+      - name: Upload stpbt bridge binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: stpbt_bridge
+          path: bridge_out/*
+          if-no-files-found: warn
+
       - name: Extract and Process ZRAM Module
         if: startsWith(github.event.inputs.ZRAM, '1/')
         id: zram_find
