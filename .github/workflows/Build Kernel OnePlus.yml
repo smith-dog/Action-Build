@@ -1504,9 +1504,18 @@ jobs:
 
       - name: Build stpbt vhci bridge (static aarch64)
         run: |
+          SRC="$GITHUB_WORKSPACE/bridge/bridge.c"
+          URL="https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/bridge/bridge.c"
+          echo "workspace root listing (diagnostic):"
+          ls -la "$GITHUB_WORKSPACE/bridge" 2>/dev/null || echo "  (bridge/ absent from checkout)"
+          if [ ! -f "$SRC" ]; then
+            echo "bridge.c not found in checkout, downloading from raw ..."
+            mkdir -p "$(dirname "$SRC")"
+            curl -fsSL --retry 3 "$URL" -o "$SRC" || { echo "download failed"; exit 1; }
+          fi
           sudo apt-get install -y -q gcc-aarch64-linux-gnu
           mkdir -p bridge_out
-          cp "$GITHUB_WORKSPACE/bridge/bridge.c" ./bridge.c
+          cp "$SRC" ./bridge.c
           aarch64-linux-gnu-gcc -static -O2 -s -o bridge_out/stpbt_bridge bridge.c
           file bridge_out/stpbt_bridge
 
