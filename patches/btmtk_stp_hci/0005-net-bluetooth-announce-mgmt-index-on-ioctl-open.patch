@@ -1,0 +1,43 @@
+From: bridge <bridge@local>
+Subject: [PATCH 0005] net/bluetooth: announce mgmt index on first successful
+ ioctl open
+
+The vhci controller's automatic power-on at registration can fail (the
+MTK transport behind it asserts and reopens its session for a few seconds
+right at startup, so the init commands hit HCI timeouts).  Later
+`HCIDEVUP` (hciconfig hci0 up) opens the device through the ioctl path,
+which never clears HCI_SETUP and never calls mgmt_index_added().  With
+HCI_SETUP stuck, READ_INDEX_LIST skips the controller and userspace
+(bluetoothd/btmgmt) can never see it, even though the RAW HCI channel
+works fine.
+
+Clear HCI_SETUP and announce the index on the first successful open,
+whatever path it came through.  For devices whose registration power-on
+already succeeded the flag is long cleared, so this is a no-op.
+
+Signed-off-by: bridge <bridge@local>
+---
+ net/bluetooth/hci_core.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/net/bluetooth/hci_core.c b/net/bluetooth/hci_core.c
+--- a/net/bluetooth/hci_core.c
++++ b/net/bluetooth/hci_core.c
+@@ -1604,7 +1604,17 @@ static int hci_dev_do_open(struct hci_dev *hdev)
+ 		    hdev->dev_type == HCI_PRIMARY) {
+ 			ret = __hci_req_hci_power_on(hdev);
+ 			mgmt_power_on(hdev, ret);
+ 		}
++
++		/* The first successful open may have come through the
++		 * HCIDEVUP ioctl path (auto power-on at registration
++		 * failed earlier).  Announce the index to mgmt, or
++		 * userspace never sees this controller. */
++		if (hci_dev_test_and_clear_flag(hdev, HCI_SETUP)) {
++			if (hci_dev_test_flag(hdev, HCI_UNCONFIGURED))
++				set_bit(HCI_RAW, &hdev->flags);
++			mgmt_index_added(hdev);
++		}
+ 	} else {
+ 		/* Init failed, cleanup */
+ 		flush_work(&hdev->tx_work);

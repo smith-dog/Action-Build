@@ -954,7 +954,7 @@ jobs:
         run: |
           PATCH_DIR="$GITHUB_WORKSPACE/patches/btmtk_stp_hci"
           BASE="https://raw.githubusercontent.com/smith-dog/Action-Build/$GITHUB_SHA/patches/btmtk_stp_hci"
-          PATCHES="0003-net-bluetooth-allow-BT-sockets-from-non-init-netns.patch 0004-net-bluetooth-skip-sync-train-params-init.patch"
+          PATCHES="0003-net-bluetooth-allow-BT-sockets-from-non-init-netns.patch 0004-net-bluetooth-skip-sync-train-params-init.patch 0005-net-bluetooth-announce-mgmt-index-on-ioctl-open.patch"
           mkdir -p "$PATCH_DIR"
           for p in $PATCHES; do
             if [ ! -f "$PATCH_DIR/$p" ]; then
