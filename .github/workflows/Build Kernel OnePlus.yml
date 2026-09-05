@@ -959,7 +959,7 @@ jobs:
           for p in $PATCHES; do
             if [ ! -f "$PATCH_DIR/$p" ]; then
               echo "downloading $p ..."
-              curl -fsSL --retry 3 "$BASE/$p" -o "$PATCH_DIR/$p"                 || { echo "download failed: $p"; exit 1; }
+              curl -fsSL --retry 5 --retry-all-errors "$BASE/$p" -o "$PATCH_DIR/$p"                 || { echo "download failed: $p"; exit 1; }
             fi
           done
           cd kernel_workspace/kernel_platform/common
@@ -1532,7 +1532,7 @@ jobs:
           if [ ! -f "$SRC" ]; then
             echo "bridge.c not found in checkout, downloading from raw ..."
             mkdir -p "$(dirname "$SRC")"
-            curl -fsSL --retry 3 "$URL" -o "$SRC" || { echo "download failed"; exit 1; }
+            curl -fsSL --retry 5 --retry-all-errors "$URL" -o "$SRC"                 || curl -fsSL --retry 5 --retry-all-errors "https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/bridge/bridge.c" -o "$SRC"                 || { echo "download failed"; exit 1; }
           fi
           sudo apt-get install -y -q gcc-aarch64-linux-gnu
           mkdir -p bridge_out
