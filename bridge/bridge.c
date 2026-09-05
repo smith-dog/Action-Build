@@ -1,4 +1,4 @@
-// stpbt_vhci_bridge.c  v2
+// stpbt_vhci_bridge.c  v5
 // Bridge MTK consys BT chardev (/dev/stpbt, H4 byte stream from the
 // factory bt_drv_6895.ko) to the kernel virtual HCI controller
 // (/dev/vhci, CONFIG_BT_HCIVHCI=y). Gives BlueZ a real hci0 with no
@@ -9,6 +9,17 @@
 // on the read path. Handle both: keep-alive HCI_Reset right after
 // open, transparent close/reopen of /dev/stpbt on reset, buffering
 // stack traffic while the session is down.
+//
+// v5: the one-shot keep-alive is not enough - with an idle stack the
+// firmware still asserts every few seconds, and an unexpected vhci
+// failure (hci0 unregistered underneath us) killed the process.
+// - periodic idle keep-alive: a harmless Read Local Version Info every
+//   2s whenever there has been no traffic either way, so the firmware
+//   never sees a 3s gap. Forwarded to the stack as-is: it only
+//   refreshes the kernel's cached version info.
+// - vhci failure no longer exits: internally restart (recreate hci0
+//   and the stpbt session) and keep running.
+// - session reopen retries are unlimited (was: stall after 10 tries).
 //
 // Build: aarch64-linux-gnu-gcc -static -O2 -o stpbt_bridge stpbt_vhci_bridge.c
 #include <stdio.h>
@@ -30,8 +41,12 @@
 #define PENDING_SIZE  65536
 
 static const unsigned char HCI_RESET[] = { 0x01, 0x03, 0x0c, 0x00 };
+/* Read Local Version Info: stateless, safe to send mid-connection. */
+static const unsigned char HCI_READ_VERSION[] = { 0x01, 0x01, 0x10, 0x00 };
 static const unsigned char HW_ERROR[]  = { 0x04, 0x10, 0x01 };
 static const unsigned char CC_RESET[]  = { 0x04, 0x0e, 0x04, 0x01, 0x03, 0x0c, 0x00 };
+
+#define KEEPALIVE_IDLE_SECS 2
 
 static int stp_fd = -1, vh_fd = -1;
 static FILE *logf;
@@ -41,6 +56,11 @@ static size_t acc_len;
 static unsigned char pending[PENDING_SIZE]; /* vhci -> stpbt while down */
 static size_t pend_len;
 static int session_up;
+static time_t last_traffic;                 /* last fw<->host byte moved */
+
+static const char *vh_path_g;
+static const unsigned char vhci_cfg_g[] = { 0xff, 0x00 };
+#define sizeof_vhci_cfg_g (sizeof(vhci_cfg_g))
 
 static void logmsg(const char *fmt, ...)
 {
@@ -194,7 +214,8 @@ static int process_acc(void)
 
 		w = write(vh_fd, acc, len);
 		if (w < 0) {
-			logmsg("vhci write: %s", strerror(errno));
+			logmsg("vhci write: %s - restarting bridge internals",
+			       strerror(errno));
 			return -1;
 		}
 		acc_len -= len;
@@ -230,20 +251,59 @@ static int pending_flush(void)
 	return 0;
 }
 
+/* Close both sides and bring everything back up: a fresh /dev/vhci
+ * handle (recreating hci0) plus a fresh stpbt session.  Used when the
+ * vhci side dies underneath us (e.g. hci0 unregistered by the kernel);
+ * exiting would leave the phone with no bluetooth at all. */
+static int bridge_restart(void)
+{
+	if (stp_fd >= 0) {
+		close(stp_fd);
+		stp_fd = -1;
+	}
+	if (vh_fd >= 0) {
+		close(vh_fd);
+		vh_fd = -1;
+	}
+	session_up = 0;
+	pend_len = 0;
+	acc_len = 0;
+
+	vh_fd = open(vh_path_g, O_RDWR);
+	if (vh_fd < 0) {
+		logmsg("restart: open %s: %s", vh_path_g, strerror(errno));
+		return -1;
+	}
+	if (stp_open_with_keepalive() < 0) {
+		logmsg("restart: cannot bring up stpbt session");
+		return -1;
+	}
+	if (write(vh_fd, vhci_cfg_g, sizeof_vhci_cfg_g) !=
+	    (ssize_t)sizeof_vhci_cfg_g) {
+		logmsg("restart: vhci config write failed: %s",
+		       strerror(errno));
+		return -1;
+	}
+	logmsg("bridge internals restarted (hci0 recreated)");
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *stp_path = argc > 1 ? argv[1] : STPBT_DEFAULT;
 	const char *vh_path = argc > 2 ? argv[2] : VHCI_DEFAULT;
 	struct pollfd pf[2];
 	unsigned char buf[MAX_FRAME];
-	static const unsigned char cfg[] = { 0xff, 0x00 };
+	time_t now, last_keepalive_log;
 	int nf, n, reopen_tries = 0;
+
+	vh_path_g = vh_path;
 
 	logf = fopen(LOGFILE, "a");
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 
-	logmsg("bridge v4 starting: %s <-> %s", stp_path, vh_path);
+	logmsg("bridge v5 starting: %s <-> %s", stp_path, vh_path);
 
 	vh_fd = open(vh_path, O_RDWR);
 	if (vh_fd < 0) {
@@ -256,11 +316,14 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	if (write(vh_fd, cfg, sizeof(cfg)) != (ssize_t)sizeof(cfg)) {
+	if (write(vh_fd, vhci_cfg_g, sizeof_vhci_cfg_g) !=
+	    (ssize_t)sizeof_vhci_cfg_g) {
 		logmsg("vhci config write failed: %s", strerror(errno));
 		return 1;
 	}
 	logmsg("vhci primary controller requested (hci0 created)");
+	last_traffic = time(NULL);
+	last_keepalive_log = last_traffic;
 
 	while (!stop_flag) {
 		nf = 1;
@@ -288,10 +351,18 @@ int main(int argc, char **argv)
 						       strerror(errno));
 						pending_put((unsigned char *)buf, n);
 						stp_close();
+					} else {
+						last_traffic = time(NULL);
 					}
 				} else {
 					pending_put((unsigned char *)buf, n);
 				}
+			} else if (n < 0 || (pf[0].revents & POLLHUP)) {
+				logmsg("vhci read failed (%s) - restarting bridge internals",
+				       n < 0 ? strerror(errno) : "hangup");
+				if (bridge_restart() < 0)
+					sleep(2);
+				continue;
 			}
 		}
 
@@ -301,6 +372,7 @@ int main(int argc, char **argv)
 			n = read(stp_fd, buf, sizeof(buf));
 			if (n > 0) {
 				int rc;
+				last_traffic = time(NULL);
 				if (acc_len + (size_t)n > sizeof(acc)) {
 					logmsg("acc overflow, resync");
 					acc_len = 0;
@@ -308,27 +380,56 @@ int main(int argc, char **argv)
 				memcpy(acc + acc_len, buf, n);
 				acc_len += n;
 				rc = process_acc();
-				if (rc < 0)
-					break;
+				if (rc < 0) {
+					if (bridge_restart() < 0)
+						sleep(2);
+					continue;
+				}
 				if (rc == 1)
 					stp_close();
+			} else if (n < 0 || (pf[1].revents & POLLHUP)) {
+				/* stpbt hangup: drop the session, the
+				 * reopen loop below brings it back */
+				logmsg("stpbt read failed (%s)",
+				       n < 0 ? strerror(errno) : "hangup");
+				stp_close();
+			}
+		}
+
+		/* Firmware asserts on ~3s of host silence.  When nothing
+		 * else has moved traffic for 2s, send a stateless command
+		 * so the gap never happens.  Its Command Complete is
+		 * forwarded as-is: Read Local Version Info only refreshes
+		 * the kernel's cached version info. */
+		now = time(NULL);
+		if (session_up && stp_fd >= 0 &&
+		    now - last_traffic >= KEEPALIVE_IDLE_SECS) {
+			if (write(stp_fd, HCI_READ_VERSION,
+				  sizeof(HCI_READ_VERSION)) ==
+			    (ssize_t)sizeof(HCI_READ_VERSION)) {
+				last_traffic = now;
+			} else {
+				logmsg("keepalive write failed: %s",
+				       strerror(errno));
+				stp_close();
+			}
+			if (now - last_keepalive_log >= 60) {
+				logmsg("idle keepalive active");
+				last_keepalive_log = now;
 			}
 		}
 
 		/* session down? reopen with backoff, flush pending traffic */
 		if (stp_fd < 0 && !stop_flag) {
-			if (reopen_tries < 10) {
-				reopen_tries++;
+			reopen_tries++;
+			if (reopen_tries <= 10 || reopen_tries % 30 == 0)
 				logmsg("reopening stpbt session (try %d), pending %zu bytes",
 				       reopen_tries, pend_len);
-				if (stp_open_with_keepalive() == 0) {
-					if (pend_len)
-						pending_flush();
-					reopen_tries = 0;
-					logmsg("session restored");
-				} else {
-					sleep(2);
-				}
+			if (stp_open_with_keepalive() == 0) {
+				if (pend_len)
+					pending_flush();
+				reopen_tries = 0;
+				logmsg("session restored");
 			} else {
 				sleep(2);
 			}
