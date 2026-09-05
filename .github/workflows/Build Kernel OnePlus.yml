@@ -950,6 +950,27 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' ./security/Kconfig
 
+      - name: Apply BT netns patch (AF_BLUETOOTH from containers)
+        run: |
+          PATCH_DIR="$GITHUB_WORKSPACE/patches/btmtk_stp_hci"
+          BASE="https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/patches/btmtk_stp_hci"
+          PATCHES="0003-net-bluetooth-allow-BT-sockets-from-non-init-netns.patch"
+          mkdir -p "$PATCH_DIR"
+          for p in $PATCHES; do
+            if [ ! -f "$PATCH_DIR/$p" ]; then
+              echo "downloading $p ..."
+              curl -fsSL --retry 3 "$BASE/$p" -o "$PATCH_DIR/$p"                 || { echo "download failed: $p"; exit 1; }
+            fi
+          done
+          cd kernel_workspace/kernel_platform/common
+          for p in $PATCHES; do
+            git apply --check "$PATCH_DIR/$p"               || { echo "patch check failed: $p"; exit 1; }
+          done
+          for p in $PATCHES; do
+            git apply --whitespace=nowarn "$PATCH_DIR/$p"
+          done
+          echo "bt netns patch applied"
+
       # 配置信息，带*为附加项目，具有一定危险性和不确定性
       - name: Add Configuration Settings
         run: |

@@ -1,0 +1,21 @@
+diff --git a/net/bluetooth/af_bluetooth.c b/net/bluetooth/af_bluetooth.c
+index 0b8400bd..066602c4 100644
+--- a/net/bluetooth/af_bluetooth.c
++++ b/net/bluetooth/af_bluetooth.c
+@@ -113,9 +113,13 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto,
+ {
+ 	int err;
+ 
+-	if (net != &init_net)
+-		return -EAFNOSUPPORT;
+-
++	/*
++	 * The bluetooth stack is not netns-aware (global hci devices and
++	 * bt_proto table), so sockets created from a non-init_net namespace
++	 * still talk to the same global stack.  Allow them: DroidSpaces
++	 * containers live in a non-init netns and need AF_BLUETOOTH access
++	 * for BlueZ/hci0.
++	 */
+ 	if (proto < 0 || proto >= BT_MAX_PROTO)
+ 		return -EINVAL;
+ 
