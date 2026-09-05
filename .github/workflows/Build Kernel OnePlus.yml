@@ -950,29 +950,6 @@ jobs:
           curl -LSs https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' ./security/Kconfig
 
-      - name: Apply MTK STP HCI glue (hci0 without USB)
-        run: |
-          PATCH_DIR="$GITHUB_WORKSPACE/patches/btmtk_stp_hci"
-          BASE="https://raw.githubusercontent.com/smith-dog/Action-Build/KernelSU/patches/btmtk_stp_hci"
-          PATCHES="0001-drivers-bluetooth-add-btmtk_stp_hci.patch"
-          mkdir -p "$PATCH_DIR"
-          for p in $PATCHES; do
-            if [ ! -f "$PATCH_DIR/$p" ]; then
-              echo "patch not found in checkout, downloading $p ..."
-              curl -fsSL "$BASE/$p" -o "$PATCH_DIR/$p" \
-                || { echo "download patch failed: $p"; exit 1; }
-            fi
-          done
-          cd kernel_workspace/kernel_platform/common
-          for p in $PATCHES; do
-            git apply --check "$PATCH_DIR/$p" \
-              || { echo "btmtk_stp_hci patch check failed: $p"; exit 1; }
-          done
-          for p in $PATCHES; do
-            git apply --whitespace=nowarn "$PATCH_DIR/$p"
-          done
-          echo "btmtk_stp_hci patched in"
-
       # 配置信息，带*为附加项目，具有一定危险性和不确定性
       - name: Add Configuration Settings
         run: |
@@ -1021,13 +998,12 @@ jobs:
           # KernelSU配置
           set_config "CONFIG_KSU=y"
           
-          # buletooth配置
-          set_config "CONFIG_BT_MTKUART=y"
-          set_config "CONFIG_BT_MTK_STP_HCI=m"
-          # 注意：MODVERSIONS 必须保持 =y——工厂 vendor 模块（wmt_drv 等）的
-          # vermagic 带 "modversions" 标记，内核若为 n 会令所有 vendor 模块
-          # 被拒载（-ENOEXEC）导致无法开机。btmtk_stp_hci 用 __weak 声明引用
-          # wmt_drv 符号，modpost 与加载期 CRC 均不受影响。
+          # buletooth配置：MTK consys BT 由工厂 bt_drv_6895.ko（BTIF 架构）管理，
+          # 通过 /dev/stpbt 字节管道暴露 HCI；内核提供 vhci 虚拟控制器，
+          # 用户态桥接脚本把 /dev/stpbt <-> /dev/vhci 打通后 BlueZ 即可用 hci0。
+          # 注意：MODVERSIONS 必须保持 =y——工厂 vendor 模块 vermagic 带
+          # "modversions" 标记，内核为 n 时所有 vendor 模块被拒载导致无法开机。
+          set_config "CONFIG_BT_HCIVHCI=y"
 
           # KPM配置
           if [ "${{ github.event.inputs.KPM }}" = "KPM" ] || [ "${{ github.event.inputs.KPM }}" = "N/A" ]; then
